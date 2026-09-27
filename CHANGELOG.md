@@ -11,7 +11,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - CI runs on release tags, and a tag can be `v<version>` or `<name>--v<version>`.
 - Step 5 in `SKILL.md` adds `--console`, which the console check in the checklist needs.
 - A malformed `contrast` value makes `check_contrast.py` exit 1 with a clear message on
-  both parser paths, and numeric token names still work.
+  both parser paths. Both paths also match numeric token names whether or not they are
+  quoted, and resolve references such as `{colors.50}`.
 - The em dash rule's import and `content:` exclusions now apply only inside a string
   literal, never in markup text or a copy attribute.
 - The placeholder rule flags Nexus at either end of a text run and at a sentence end.

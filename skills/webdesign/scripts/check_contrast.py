@@ -72,6 +72,14 @@ def _strip_comment(line: str) -> str:
     return line.rstrip()
 
 
+def _unquote(key: str) -> str:
+    """Drops one pair of matching quotes around a block-map key. YAML reads the quotes
+    as syntax, so a key written "50" must read as 50 here, as it does under PyYAML."""
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in "\"'":
+        return key[1:-1]
+    return key
+
+
 def _parse_flow(text: str):
     """Parses a YAML flow collection or scalar: [a, [b, c]], {k: v}, "quoted"."""
     pos = 0
@@ -249,7 +257,7 @@ def _fallback_parse(block: str) -> dict:
             raise ParseError(f"nested map under {current}.{k.strip()} is not supported")
         if v[:1] in "[{" and _unclosed(v):
             raise ParseError(f"multi-line flow value for {k.strip()!r} is not supported")
-        data[current][k.strip()] = _parse_flow(v) if v[:1] in "[{" else v.strip("\"'")
+        data[current][_unquote(k.strip())] = _parse_flow(v) if v[:1] in "[{" else v.strip("\"'")
     if pending:
         raise ParseError(f"unclosed flow collection under {current!r}")
     return data
@@ -406,7 +414,16 @@ def to_hex(lin: tuple[float, float, float]) -> str:
     return "#" + "".join(f"{round(_linear_to_srgb(c) * 255):02x}" for c in lin)
 
 
-def resolve(name: str, palette: dict, seen: frozenset = frozenset()) -> str | None:
+def _text_keys(palette: dict) -> dict:
+    """The colour map keyed by text. PyYAML reads a key written 50 as an int, while the
+    stdlib parser and a {colors.50} reference both give the text "50"."""
+    return {str(key): value for key, value in palette.items()}
+
+
+def resolve(name: str | int | float, palette: dict, seen: frozenset = frozenset()) -> str | None:
+    # A declared name can be the int 900 under PyYAML and is always text under the
+    # stdlib parser; the palette is keyed by text, so the lookup is too.
+    name = str(name).strip()
     value = palette.get(name)
     if value is None:
         return None
@@ -485,10 +502,12 @@ def check_file(path: Path) -> dict:
         palette = data.get(theme_key)
         if not isinstance(palette, dict) or not palette:
             continue
+        palette = _text_keys(palette)
         # The dark map inherits any token it does not override, so a pair can mix an
-        # overridden background with an inherited ink.
+        # overridden background with an inherited ink. Both maps are keyed by text
+        # before the merge, or a dark "50" would sit beside a light 50, not replace it.
         if theme_key == "colors-dark" and isinstance(data.get("colors"), dict):
-            palette = {**data["colors"], **palette}
+            palette = {**_text_keys(data["colors"]), **palette}
         pairs = []
         if declared:
             pairs.extend(declared)
