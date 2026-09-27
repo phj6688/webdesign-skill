@@ -1,0 +1,14 @@
+{
+  "name": "webdesign",
+  "version": "0.1.0",
+  "description": "A merged web design and UX/UI skill: it picks tokens first, bans the known AI design tells, lints the source deterministically, and screenshots every breakpoint before it calls the work done.",
+  "author": {
+    "name": "Peyman",
+    "email": "peyman.h.j@gmail.com"
+  },
+  "repository": "https://github.com/phj6688/webdesign-skill",
+  "license": "MIT",
+  "homepage": "https://github.com/phj6688/webdesign-skill",
+  "keywords": ["webdesign", "ux", "ui", "design-system", "design-tokens", "frontend", "playwright", "accessibility", "claude-code", "skill"],
+  "skills": "./skills/"
+}

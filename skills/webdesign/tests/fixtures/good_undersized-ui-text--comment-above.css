@@ -1,0 +1,5 @@
+/* fixture-expect tiny-text count=1 */
+/* nav styles live elsewhere; this comment must not make .note functional */
+.note {
+  font-size: 10px;
+}
