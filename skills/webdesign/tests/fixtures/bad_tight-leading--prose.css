@@ -1,0 +1,8 @@
+/* fixture-expect tight-leading count=2 */
+p {
+  line-height: 1.1;
+}
+
+.prose {
+  line-height: 1.2;
+}

@@ -1,0 +1,6 @@
+/* fixture-expect undersized-ui-text count=0 */
+/* nav styles live elsewhere; this comment must not make .note functional */
+.note {
+  /* the comment above a declaration must not hide it */
+  font-size: 10px;
+}

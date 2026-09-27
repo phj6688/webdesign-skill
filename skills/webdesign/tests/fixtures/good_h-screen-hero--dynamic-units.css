@@ -1,0 +1,17 @@
+.hero {
+  min-height: 100dvh;
+}
+
+.panel {
+  height: 100svh;
+}
+
+.sheet {
+  max-height: 100lvh;
+}
+
+/* 100vh first, then the dynamic unit, is the fallback for older browsers. */
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}

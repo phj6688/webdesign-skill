@@ -1,0 +1,9 @@
+/* fixture-expect undersized-ui-text count=2 */
+/* fixture-expect tiny-text count=0 */
+.nav a {
+  font-size: 10px;
+}
+
+button {
+  font-size: 0.625rem;
+}

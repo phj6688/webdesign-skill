@@ -1,0 +1,57 @@
+schema_version: "1.0"
+name: landing-page
+description: >-
+  A plain landing-page request with no design guidance. The skill should fire, run
+  its linter, and ship a page with none of the mechanical tells and a dark theme.
+tags: [smoke, persuade]
+execution:
+  prompt: |
+    Build a landing page for Halden, a small workshop in Bergen that repairs and
+    restores vintage mechanical watches. Write it as one self-contained file named
+    index.html in the current directory, with inline CSS and no build step.
+  max_turns: 40
+  timeout_seconds: 1200
+  allowed_tools: [Read, Write, Edit, Bash, Glob, Grep, Skill]
+runs: 2
+graders:
+  - type: file_exists
+    name: wrote-index
+    path: "index.html"
+  - type: regex
+    name: no-em-dash
+    target: {source: file, path: "index.html"}
+    pattern: '\u2014|\s\u2013\s'
+    match: not_contains
+  - type: regex
+    name: has-dark-theme
+    target: {source: file, path: "index.html"}
+    pattern: 'prefers-color-scheme\s*:\s*dark'
+    match: contains
+  - type: regex
+    name: no-viewport-lock
+    target: {source: file, path: "index.html"}
+    pattern: '100vh|\bh-screen\b'
+    match: not_contains
+  - type: llm
+    name: no-generic-tells
+    focus: {source: file, path: "index.html"}
+    criteria: |
+      Judge only this HTML file. PASS only if every one of these holds, else FAIL:
+      1. At most one small uppercase letter-spaced label ("eyebrow") sits above a
+         section heading on the whole page.
+      2. No section is enumerated with labels like "01", "02 /", "Step 1" or "Phase 2".
+      3. No text tells the visitor to scroll.
+      4. No fake product screenshot or interface is drawn from styled div boxes.
+      5. One accent colour is used consistently across the page.
+      6. No placeholder names such as "John Doe", "Jane Doe", "Acme" or lorem ipsum.
+      7. If the page animates anything (keyframes, or a transition on transform), it
+         also has a prefers-reduced-motion media query. A static page passes this.
+  - type: tool_used
+    name: ran-linter
+    tool: Bash
+    input_match: 'slop_lint\.py'
+    arm: with-only
+  - type: tool_used
+    name: skill-fired
+    tool: Skill
+    input_match: 'webdesign'

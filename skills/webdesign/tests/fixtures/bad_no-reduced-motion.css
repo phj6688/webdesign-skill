@@ -1,0 +1,12 @@
+@keyframes drift {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.panel {
+  animation: drift 600ms ease-out;
+}

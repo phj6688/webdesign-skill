@@ -1,0 +1,6 @@
+/* fixture-expect tight-leading count=1 */
+@supports (display: grid) {
+  .card p {
+    line-height: 1.1;
+  }
+}

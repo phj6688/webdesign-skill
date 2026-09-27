@@ -1,0 +1,8 @@
+/* fixture-expect h-screen-hero count=2 */
+.hero {
+  min-height: 100vh;
+}
+
+.panel {
+  height: 100vh;
+}

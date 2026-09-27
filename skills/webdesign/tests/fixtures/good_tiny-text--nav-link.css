@@ -1,0 +1,4 @@
+/* fixture-expect undersized-ui-text count=0 */
+.nav a {
+  font-size: 11px;
+}

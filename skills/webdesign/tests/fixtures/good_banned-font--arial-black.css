@@ -1,0 +1,4 @@
+/* fixture-expect system-font-display count=1 */
+.poster-title {
+  font-family: "Arial Black", sans-serif;
+}

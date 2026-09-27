@@ -1,0 +1,59 @@
+schema_version: "1.0"
+name: pricing-dark
+description: >-
+  A pricing page for a developer tool, a surface that invites the three identical
+  cards and the purple gradient. Checks the tells, the theme pair and the contrast.
+tags: [persuade, pricing]
+execution:
+  prompt: |
+    Make a pricing page for Tessel, a command-line tool that finds flaky tests in CI
+    runs. It has a free tier, a team tier at 12 euros per seat per month, and an
+    enterprise tier. Write it as one self-contained file named pricing.html in the
+    current directory, with inline CSS and no build step.
+  max_turns: 40
+  timeout_seconds: 1200
+  allowed_tools: [Read, Write, Edit, Bash, Glob, Grep, Skill]
+runs: 2
+graders:
+  - type: file_exists
+    name: wrote-pricing
+    path: "pricing.html"
+  - type: regex
+    name: no-em-dash
+    target: {source: file, path: "pricing.html"}
+    pattern: '\u2014|\s\u2013\s'
+    match: not_contains
+  - type: regex
+    name: has-dark-theme
+    target: {source: file, path: "pricing.html"}
+    pattern: 'prefers-color-scheme\s*:\s*dark'
+    match: contains
+  - type: regex
+    name: no-gradient-text
+    target: {source: file, path: "pricing.html"}
+    pattern: 'background-clip\s*:\s*text'
+    match: not_contains
+  - type: llm
+    name: pricing-quality
+    focus: {source: file, path: "pricing.html"}
+    criteria: |
+      Judge only this HTML file. PASS only if every one of these holds, else FAIL:
+      1. The three tiers are not rendered as three visually identical cards; one tier
+         is clearly distinguished by more than a colour change or a "popular" badge.
+      2. There is no purple or violet gradient anywhere, and no glowing coloured
+         shadow.
+      3. Every tier has a call to action, and actions with the same intent share one
+         label.
+      4. Prices are stated exactly as given, with no invented statistics or fake
+         testimonials presented as real.
+      5. Text is plainly readable: no light grey text on a white background and no
+         dark grey text on a black background.
+  - type: tool_used
+    name: ran-linter
+    tool: Bash
+    input_match: 'slop_lint\.py'
+    arm: with-only
+  - type: tool_used
+    name: skill-fired
+    tool: Skill
+    input_match: 'webdesign'
