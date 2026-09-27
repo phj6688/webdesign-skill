@@ -8,6 +8,7 @@ maths that drifts from the standard fails here before it can pass a bad palette.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +36,17 @@ def ratio(fg: str, bg: str) -> float:
 
 def run(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+
+
+def message(res: subprocess.CompletedProcess) -> str:
+    """The error text without the file path, which names the fixture folder."""
+    return res.stderr.rpartition(": error: ")[2]
+
+
+def shown(res: subprocess.CompletedProcess, theme: str, pair: str, want: str) -> bool:
+    """Whether the report prints this pair, in this theme, passing 4.5 at this ratio."""
+    row = rf"^\s*ok\s+{re.escape(theme)}\s+{re.escape(pair)}\s+{re.escape(want)} >= 4\.5$"
+    return re.search(row, res.stdout, re.M) is not None
 
 
 for fg, bg, want in [
@@ -127,6 +139,61 @@ check("PyYAML path agrees on the zero-indent file",
 res = run(str(FIXTURES / "inline.md"))
 check("PyYAML path agrees on the inline file",
       res.returncode == 2 and "caption on canvas" in res.stdout, f"exit {res.returncode}")
+
+# A malformed contrast list is an error that names the bad entry, on both parser
+# paths: never a traceback, and never a pair read one character at a time. A null
+# name arrives as None from PyYAML and as the text "~" from the stdlib parser, and
+# both must get the same error.
+for name, wants in [
+    ("scalar.md", ("'contrast' must be a list of [fg, bg, floor] entries", "5")),
+    ("stringitem.md", ("'ink'",)),
+    ("twoitem.md", ("['ink', 'canvas']",)),
+    ("nullname.md", ("'ink'", "needs two token names")),
+]:
+    stdlib = subprocess.run([sys.executable, "-c", probe.replace("inline.md", name)],
+                            capture_output=True, text=True)
+    for parser, res in (("PyYAML path", run(str(FIXTURES / name))), ("stdlib parser", stdlib)):
+        check(f"{parser}: {name} is an error naming the entry, not a traceback",
+              res.returncode == 1 and "Traceback" not in res.stderr
+              and all(want in message(res) for want in wants),
+              f"exit {res.returncode}: {res.stderr.strip()[-160:]}")
+
+# A numeric scale such as 50 to 900 reads as ints under PyYAML and as strings under
+# the stdlib parser, and both must resolve.
+stdlib = subprocess.run([sys.executable, "-c", probe.replace("inline.md", "numeric.md")],
+                        capture_output=True, text=True)
+for parser, res in (("PyYAML path", run(str(FIXTURES / "numeric.md"))), ("stdlib parser", stdlib)):
+    check(f"{parser}: numeric token names resolve",
+          res.returncode == 0 and "900 on 50" in res.stdout,
+          f"exit {res.returncode}: {(res.stdout + res.stderr).strip()[-160:]}")
+
+# PyYAML reads 50 as an int and "50" as a string, and the stdlib parser reads both as
+# text, so where the quotes sit must not decide whether a name matches. The dark case
+# measures the dark pair only when each dark key replaces its light key; a light colour
+# left in place measures about 1.1 and fails.
+for name, what, rows in [
+    ("quotednames.md", "quoted names match unquoted keys", [("colors", "900 on 50", "17.40")]),
+    ("quotedkeys.md", "unquoted names match quoted keys", [("colors", "900 on 50", "17.40")]),
+    ("numericref.md", "{colors.50} finds the key 50", [("colors", "ink on canvas", "17.40")]),
+    ("darkoverride.md", "a dark key overrides its light key however either is quoted",
+     [("colors", "ink on 50", "17.40"), ("colors", "900 on canvas", "17.40"),
+      ("colors-dark", "ink on 50", "16.70"), ("colors-dark", "900 on canvas", "16.70")]),
+]:
+    stdlib = subprocess.run([sys.executable, "-c", probe.replace("inline.md", name)],
+                            capture_output=True, text=True)
+    for parser, res in (("PyYAML path", run(str(FIXTURES / name))), ("stdlib parser", stdlib)):
+        check(f"{parser}: {what}",
+              res.returncode == 0 and all(shown(res, *row) for row in rows),
+              f"exit {res.returncode}: {(res.stdout + res.stderr).strip()[-200:]}")
+
+for entry in (["ink", "canvas", "high"], ["ink", "canvas", True], ["ink", None, 4.5],
+              ["ink", "null", 4.5], [True, "canvas", 4.5]):
+    try:
+        cc.declared_pairs({"contrast": [entry]})
+        refused = False
+    except cc.ParseError:
+        refused = True
+    check(f"contrast entry {entry!r} is refused", refused)
 
 print(f"\n{len(failures)} failure(s)")
 sys.exit(1 if failures else 0)

@@ -30,7 +30,7 @@ graders:
   - type: regex
     name: no-viewport-lock
     target: {source: file, path: "index.html"}
-    pattern: '100vh|\bh-screen\b'
+    pattern: '(?<![\w-])((?:min-|max-)?height)\s*:[^;}<]*100vh(?![^}<]*(?<![\w-])\1\s*:[^;}<]*100[dsl]vh)|100vh(?<!(?:min-|max-)?height\s*:[^;}<]*100vh)|\bh-screen\b'
     match: not_contains
   - type: llm
     name: no-generic-tells

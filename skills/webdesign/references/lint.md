@@ -92,6 +92,9 @@ Know the limits so you do not over-trust a clean run.
   and inherits the nearest opening tag for context. A quoted token with no spaces
   inside JSX text, such as `<p>"word"</p>`, is read as a string literal rather than as
   copy, so a dash joining two words inside those quotes is missed.
+- **Dashes on code lines.** An em or en dash inside a string literal is not reported
+  when its line also holds `import`, `require(`, `from "` or `content:`, because the
+  linter treats that line as code. A string of UI copy on such a line is missed.
 - **Which text is functional.** The size rules decide body text from functional text by
   tag, class name, role, click handler and `cursor: pointer`. Text inside a JavaScript
   expression, such as `{isUser ? 'YOU' : 'AI'}`, has no case the linter can read.

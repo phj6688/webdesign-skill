@@ -1,6 +1,6 @@
 {
   "name": "webdesign",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A merged web design and UX/UI skill: it picks tokens first, bans the known AI design tells, lints the source deterministically, and screenshots every breakpoint before it calls the work done.",
   "author": {
     "name": "Peyman",
