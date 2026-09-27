@@ -37,6 +37,11 @@ def run(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
 
 
+def message(res: subprocess.CompletedProcess) -> str:
+    """The error text without the file path, which names the fixture folder."""
+    return res.stderr.rpartition(": error: ")[2]
+
+
 for fg, bg, want in [
     ("#000000", "#ffffff", 21.0),
     ("#767676", "#ffffff", 4.54),
@@ -127,6 +132,42 @@ check("PyYAML path agrees on the zero-indent file",
 res = run(str(FIXTURES / "inline.md"))
 check("PyYAML path agrees on the inline file",
       res.returncode == 2 and "caption on canvas" in res.stdout, f"exit {res.returncode}")
+
+# A malformed contrast list is an error that names the bad entry, on both parser
+# paths: never a traceback, and never a pair read one character at a time. A null
+# name arrives as None from PyYAML and as the text "~" from the stdlib parser, and
+# both must get the same error.
+for name, wants in [
+    ("scalar.md", ("'contrast' must be a list of [fg, bg, floor] entries", "5")),
+    ("stringitem.md", ("'ink'",)),
+    ("twoitem.md", ("['ink', 'canvas']",)),
+    ("nullname.md", ("'ink'", "needs two token names")),
+]:
+    stdlib = subprocess.run([sys.executable, "-c", probe.replace("inline.md", name)],
+                            capture_output=True, text=True)
+    for parser, res in (("PyYAML path", run(str(FIXTURES / name))), ("stdlib parser", stdlib)):
+        check(f"{parser}: {name} is an error naming the entry, not a traceback",
+              res.returncode == 1 and "Traceback" not in res.stderr
+              and all(want in message(res) for want in wants),
+              f"exit {res.returncode}: {res.stderr.strip()[-160:]}")
+
+# A numeric scale such as 50 to 900 reads as ints under PyYAML and as strings under
+# the stdlib parser, and both must resolve.
+stdlib = subprocess.run([sys.executable, "-c", probe.replace("inline.md", "numeric.md")],
+                        capture_output=True, text=True)
+for parser, res in (("PyYAML path", run(str(FIXTURES / "numeric.md"))), ("stdlib parser", stdlib)):
+    check(f"{parser}: numeric token names resolve",
+          res.returncode == 0 and "900 on 50" in res.stdout,
+          f"exit {res.returncode}: {(res.stdout + res.stderr).strip()[-160:]}")
+
+for entry in (["ink", "canvas", "high"], ["ink", "canvas", True], ["ink", None, 4.5],
+              ["ink", "null", 4.5], [True, "canvas", 4.5]):
+    try:
+        cc.declared_pairs({"contrast": [entry]})
+        refused = False
+    except cc.ParseError:
+        refused = True
+    check(f"contrast entry {entry!r} is refused", refused)
 
 print(f"\n{len(failures)} failure(s)")
 sys.exit(1 if failures else 0)

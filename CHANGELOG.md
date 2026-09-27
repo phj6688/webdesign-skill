@@ -4,6 +4,23 @@ All notable changes to this skill are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-09-27
+
+### Fixed
+
+- CI runs on release tags, and a tag can be `v<version>` or `<name>--v<version>`.
+- Step 5 in `SKILL.md` adds `--console`, which the console check in the checklist needs.
+- A malformed `contrast` value makes `check_contrast.py` exit 1 with a clear message on
+  both parser paths, and numeric token names still work.
+- The em dash rule's import and `content:` exclusions now apply only inside a string
+  literal, never in markup text or a copy attribute.
+- The placeholder rule flags Nexus at either end of a text run and at a sentence end.
+- `slop_lint.py` is now 1.1.1, because two of its rules now report more.
+- `SKILL.md` now says that each `scripts/...` and `systems/...` path is relative to the
+  skill directory.
+- The `landing-page` eval grader accepts a `100vh` fallback only when the same property
+  is redeclared with a dynamic unit.
+
 ## [0.1.0] - 2026-09-27
 
 ### Added

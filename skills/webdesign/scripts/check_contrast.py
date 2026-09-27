@@ -160,6 +160,7 @@ def _parse_flow(text: str):
 
 
 RELEVANT_KEYS = ("colors", "colors-dark", "contrast")
+CONTRAST_SHAPE = "a list of [fg, bg, floor] entries"
 
 
 def _unclosed(text: str) -> bool:
@@ -216,7 +217,8 @@ def _fallback_parse(block: str) -> dict:
                     continue
                 data[current] = _parse_flow(rest)
             elif rest:
-                raise ParseError(f"{current!r} must be a map or a list, got {rest!r}")
+                shape = CONTRAST_SHAPE if current == "contrast" else "a map or a list"
+                raise ParseError(f"{current!r} must be {shape}, got {rest!r}")
             else:
                 data[current] = None
             continue
@@ -423,9 +425,61 @@ def find_pair(alternatives: list[tuple[str, str]], palette: dict) -> tuple[str, 
     return None
 
 
+def _floor(value) -> float | None:
+    """A floor as a finite number, or None. The stdlib parser reads every scalar as a
+    string, so a numeric string counts; a YAML boolean does not."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+# The stdlib parser keeps a YAML null as its text, where PyYAML gives None. Refusing
+# the text too gives a null name the same error on both parser paths.
+YAML_NULLS = frozenset({"~", "null", "Null", "NULL"})
+
+
+def _token_name(value) -> bool:
+    """Whether a contrast entry names a token. PyYAML reads a key such as 900 as an
+    int and the stdlib parser reads it as a string, so a number counts; a YAML
+    boolean or null does not."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return False
+    text = str(value).strip()
+    return bool(text) and text not in YAML_NULLS
+
+
+def declared_pairs(data: dict) -> list[tuple[str, str, float]]:
+    """The contrast list as (fg, bg, floor) rows.
+
+    Each entry is checked before it is unpacked: a scalar list raises a TypeError, and
+    a three-letter string unpacks into three one-letter token names.
+    """
+    declared = data.get("contrast")
+    if declared is None:
+        return []
+    if not isinstance(declared, list):
+        raise ParseError(f"'contrast' must be {CONTRAST_SHAPE}, got {declared!r}")
+    pairs = []
+    for entry in declared:
+        if not isinstance(entry, (list, tuple)) or len(entry) != 3:
+            raise ParseError(f"contrast entry {entry!r} is not a [fg, bg, floor] list")
+        fg, bg, floor = entry
+        if not (_token_name(fg) and _token_name(bg)):
+            raise ParseError(f"contrast entry {entry!r} needs two token names")
+        number = _floor(floor)
+        if number is None:
+            raise ParseError(f"contrast entry {entry!r} needs a number as its floor")
+        pairs.append((fg, bg, number))
+    return pairs
+
+
 def check_file(path: Path) -> dict:
     data = parse_frontmatter(split_frontmatter(path.read_text(encoding="utf-8")))
-    declared = data.get("contrast") or []
+    declared = declared_pairs(data)
     results = []
     for theme_key in THEME_KEYS:
         palette = data.get(theme_key)
@@ -437,8 +491,7 @@ def check_file(path: Path) -> dict:
             palette = {**data["colors"], **palette}
         pairs = []
         if declared:
-            for fg, bg, floor in declared:
-                pairs.append((fg, bg, float(floor)))
+            pairs.extend(declared)
         else:
             for alternatives, floor in DEFAULT_PAIRS:
                 found = find_pair(alternatives, palette)
