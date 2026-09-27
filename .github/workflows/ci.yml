@@ -5,6 +5,9 @@ on:
     branches: [dev, master]
   push:
     branches: [dev, master]
+    # A release tag runs CI too, or the tag check in release-consistency never fires.
+    # v<version> is the manual form; `claude plugin tag` creates <name>--v<version>.
+    tags: ['v*', '*--v*']
   workflow_dispatch:
 
 # One run per ref; new pushes cancel superseded runs.
@@ -234,7 +237,8 @@ jobs:
         run: |
           python - <<'PY'
           import json, os, re, sys
-          version = json.load(open('.claude-plugin/plugin.json', encoding='utf-8'))['version']
+          manifest = json.load(open('.claude-plugin/plugin.json', encoding='utf-8'))
+          version, name = manifest['version'], manifest['name']
           changelog = open('CHANGELOG.md', encoding='utf-8').read()
           if not re.search(rf'^## \[{re.escape(version)}\]', changelog, re.M):
               print(f"::error::CHANGELOG.md has no entry for plugin.json version {version}")
@@ -243,8 +247,9 @@ jobs:
           ref = os.environ.get('GITHUB_REF', '')
           if ref.startswith('refs/tags/'):
               tag = ref.split('/', 2)[2]
-              if tag != f"v{version}":
-                  print(f"::error::tag {tag} != v{version} (plugin.json)")
+              allowed = (f"v{version}", f"{name}--v{version}")
+              if tag not in allowed:
+                  print(f"::error::tag {tag} is neither {allowed[0]} nor {allowed[1]} (plugin.json)")
                   sys.exit(1)
               print(f"OK: tag {tag} matches plugin.json")
           PY

@@ -34,8 +34,9 @@ page was looked at.
 
 ## The loop
 
-The scripts live in `${CLAUDE_SKILL_DIR}/scripts/`. Every `scripts/...` path in the
-reference files is relative to that directory, not to the project you are working in.
+The scripts live in `${CLAUDE_SKILL_DIR}/scripts/`. Every `scripts/...` and
+`systems/...` path in the reference files is relative to `${CLAUDE_SKILL_DIR}`, the
+skill directory, not to the project you are working in.
 
 Run these in order. Do not skip step 1, and do not reorder 4 and 5 before 3.
 
@@ -54,8 +55,9 @@ Run these in order. Do not skip step 1, and do not reorder 4 and 5 before 3.
 4. **Lint.** `python3 ${CLAUDE_SKILL_DIR}/scripts/slop_lint.py <src>`. Fix every error
    and warning, or suppress one with a written reason. See
    [references/lint.md](references/lint.md).
-5. **Shoot and look.** `${CLAUDE_SKILL_DIR}/scripts/shoot.sh <url> --scheme both` at
-   375, 768 and 1280, in light and dark. Open and read every PNG. See
+5. **Shoot and look.**
+   `${CLAUDE_SKILL_DIR}/scripts/shoot.sh <url> --scheme both --console` at 375, 768
+   and 1280, in light and dark. Open and read every PNG. See
    [references/verify.md](references/verify.md).
 6. **Critique.** Score the result against the rubric in
    [references/critique.md](references/critique.md). Fix every P0 and P1.

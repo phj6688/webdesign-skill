@@ -23,7 +23,7 @@ import sys
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 EM_DASH = chr(0x2014)
 EN_DASH = chr(0x2013)
@@ -1211,25 +1211,29 @@ DASH_ATTRS = ("alt", "title", "aria-label", "placeholder")
 
 
 def _dash_runs(doc: Doc) -> list:
-    """(offset, text to search, text to quote, is code) for every run a reader sees."""
+    """(offset, text to search, text to quote, kind) for every run a reader sees.
+
+    kind is "jsx" for a raw JSX run, "text" for a markup text node, "string" for a
+    string literal read as UI copy, and "attr" for a copy attribute.
+    """
     runs = []
     if doc.script_primary:
         # Strings stay blank in these runs: a string reaches the rule through
         # ui_strings, which keeps the whitespace test for UI copy.
         for start, stop in doc.raw_runs:
-            runs.append((start, doc.bare_src[start:stop], doc.src[start:stop], True))
+            runs.append((start, doc.bare_src[start:stop], doc.src[start:stop], "jsx"))
     else:
         for node in doc.text_nodes:
-            runs.append((node.offset, node.text, node.text, False))
+            runs.append((node.offset, node.text, node.text, "text"))
     for offset, text in ui_strings(doc):
-        runs.append((offset, text, text, False))
+        runs.append((offset, text, text, "string"))
     for tag in doc.tags:
         if tag.closing:
             continue
         for key in DASH_ATTRS:
             entry = tag.attrs.get(key)
             if entry and not entry["braced"] and entry["value"].strip():
-                runs.append((entry["off"], entry["value"], entry["value"], False))
+                runs.append((entry["off"], entry["value"], entry["value"], "attr"))
     return runs
 
 
@@ -1251,18 +1255,21 @@ def _range_dash(text: str, start: int, stop: int) -> bool:
 
 def check_em_dash(doc: Doc) -> list:
     hits: dict = {}
-    for base, search, real, code in _dash_runs(doc):
+    for base, search, real, kind in _dash_runs(doc):
         for m in DASH_RE.finditer(search):
             at = base + m.start()
             if at in hits or doc.in_fence(at):
                 continue
-            line = doc.line_text(at)
-            if IMPORTISH_RE.search(line) or "content:" in line.replace(" ", ""):
-                continue
+            # An import path or a CSS content glyph lives in a string literal. Copy in
+            # markup can say "import" or "from" and is still copy.
+            if kind == "string":
+                line = doc.line_text(at)
+                if IMPORTISH_RE.search(line) or "content:" in line.replace(" ", ""):
+                    continue
             around = real[:m.start()].split()[-1:] + real[m.end():].split()[:1]
             if any(URLISH_RE.search(part) for part in around):
                 continue
-            if code and _in_regex_literal(doc, at):
+            if kind == "jsx" and _in_regex_literal(doc, at):
                 continue
             extra = fix = ""
             if m.group("en") and _range_dash(real, m.start(), m.end()):
@@ -1658,6 +1665,24 @@ PLACEHOLDER_COMPILED = tuple(
     (term, re.compile(pattern, re.IGNORECASE))
     for term, pattern in PLACEHOLDER_TERMS
 )
+# A slash or a dot right before the name, or a slash right after it, makes a path or
+# a selector whatever sits beyond it: /nexus, ../nexus, ~/nexus, .nexus, nexus/.
+NEXUS_PATH_BEFORE = frozenset("/.")
+# Otherwise a joiner makes "nexus" part of a path or a package name only when a
+# letter or a digit sits on its far side: nexus.js, nexus-core. Before a space, a
+# quote, closing punctuation or the end of a run it is punctuation, so "Welcome to
+# Nexus." still names the brand.
+NEXUS_JOINERS = frozenset("-_./")
+
+
+def _nexus_in_path(text: str, start: int, end: int) -> bool:
+    tail, tail_far = text[end:end + 1], text[end + 1:end + 2]
+    head = text[max(0, start - 1):start]
+    head_far = text[max(0, start - 2):max(0, start - 1)]
+    if head in NEXUS_PATH_BEFORE or tail == "/":
+        return True
+    return ((tail in NEXUS_JOINERS and tail_far.isalnum())
+            or (head in NEXUS_JOINERS and head_far.isalnum()))
 
 
 def check_placeholder_identity(doc: Doc) -> list:
@@ -1666,11 +1691,8 @@ def check_placeholder_identity(doc: Doc) -> list:
     for offset, text in visible_items(doc):
         for term, pattern in PLACEHOLDER_COMPILED:
             for m in pattern.finditer(text):
-                if term == "nexus":
-                    tail = text[m.end():m.end() + 1]
-                    head = text[max(0, m.start() - 1):m.start()]
-                    if tail in "-_./" or head in "-_./":
-                        continue
+                if term == "nexus" and _nexus_in_path(text, m.start(), m.end()):
+                    continue
                 line = doc.line_col(offset + m.start())[0]
                 if (line, term) in seen:
                     continue

@@ -72,6 +72,14 @@ def _strip_comment(line: str) -> str:
     return line.rstrip()
 
 
+def _unquote(key: str) -> str:
+    """Drops one pair of matching quotes around a block-map key. YAML reads the quotes
+    as syntax, so a key written "50" must read as 50 here, as it does under PyYAML."""
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in "\"'":
+        return key[1:-1]
+    return key
+
+
 def _parse_flow(text: str):
     """Parses a YAML flow collection or scalar: [a, [b, c]], {k: v}, "quoted"."""
     pos = 0
@@ -160,6 +168,7 @@ def _parse_flow(text: str):
 
 
 RELEVANT_KEYS = ("colors", "colors-dark", "contrast")
+CONTRAST_SHAPE = "a list of [fg, bg, floor] entries"
 
 
 def _unclosed(text: str) -> bool:
@@ -216,7 +225,8 @@ def _fallback_parse(block: str) -> dict:
                     continue
                 data[current] = _parse_flow(rest)
             elif rest:
-                raise ParseError(f"{current!r} must be a map or a list, got {rest!r}")
+                shape = CONTRAST_SHAPE if current == "contrast" else "a map or a list"
+                raise ParseError(f"{current!r} must be {shape}, got {rest!r}")
             else:
                 data[current] = None
             continue
@@ -247,7 +257,7 @@ def _fallback_parse(block: str) -> dict:
             raise ParseError(f"nested map under {current}.{k.strip()} is not supported")
         if v[:1] in "[{" and _unclosed(v):
             raise ParseError(f"multi-line flow value for {k.strip()!r} is not supported")
-        data[current][k.strip()] = _parse_flow(v) if v[:1] in "[{" else v.strip("\"'")
+        data[current][_unquote(k.strip())] = _parse_flow(v) if v[:1] in "[{" else v.strip("\"'")
     if pending:
         raise ParseError(f"unclosed flow collection under {current!r}")
     return data
@@ -404,7 +414,16 @@ def to_hex(lin: tuple[float, float, float]) -> str:
     return "#" + "".join(f"{round(_linear_to_srgb(c) * 255):02x}" for c in lin)
 
 
-def resolve(name: str, palette: dict, seen: frozenset = frozenset()) -> str | None:
+def _text_keys(palette: dict) -> dict:
+    """The colour map keyed by text. PyYAML reads a key written 50 as an int, while the
+    stdlib parser and a {colors.50} reference both give the text "50"."""
+    return {str(key): value for key, value in palette.items()}
+
+
+def resolve(name: str | int | float, palette: dict, seen: frozenset = frozenset()) -> str | None:
+    # A declared name can be the int 900 under PyYAML and is always text under the
+    # stdlib parser; the palette is keyed by text, so the lookup is too.
+    name = str(name).strip()
     value = palette.get(name)
     if value is None:
         return None
@@ -423,22 +442,75 @@ def find_pair(alternatives: list[tuple[str, str]], palette: dict) -> tuple[str, 
     return None
 
 
+def _floor(value) -> float | None:
+    """A floor as a finite number, or None. The stdlib parser reads every scalar as a
+    string, so a numeric string counts; a YAML boolean does not."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+# The stdlib parser keeps a YAML null as its text, where PyYAML gives None. Refusing
+# the text too gives a null name the same error on both parser paths.
+YAML_NULLS = frozenset({"~", "null", "Null", "NULL"})
+
+
+def _token_name(value) -> bool:
+    """Whether a contrast entry names a token. PyYAML reads a key such as 900 as an
+    int and the stdlib parser reads it as a string, so a number counts; a YAML
+    boolean or null does not."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return False
+    text = str(value).strip()
+    return bool(text) and text not in YAML_NULLS
+
+
+def declared_pairs(data: dict) -> list[tuple[str, str, float]]:
+    """The contrast list as (fg, bg, floor) rows.
+
+    Each entry is checked before it is unpacked: a scalar list raises a TypeError, and
+    a three-letter string unpacks into three one-letter token names.
+    """
+    declared = data.get("contrast")
+    if declared is None:
+        return []
+    if not isinstance(declared, list):
+        raise ParseError(f"'contrast' must be {CONTRAST_SHAPE}, got {declared!r}")
+    pairs = []
+    for entry in declared:
+        if not isinstance(entry, (list, tuple)) or len(entry) != 3:
+            raise ParseError(f"contrast entry {entry!r} is not a [fg, bg, floor] list")
+        fg, bg, floor = entry
+        if not (_token_name(fg) and _token_name(bg)):
+            raise ParseError(f"contrast entry {entry!r} needs two token names")
+        number = _floor(floor)
+        if number is None:
+            raise ParseError(f"contrast entry {entry!r} needs a number as its floor")
+        pairs.append((fg, bg, number))
+    return pairs
+
+
 def check_file(path: Path) -> dict:
     data = parse_frontmatter(split_frontmatter(path.read_text(encoding="utf-8")))
-    declared = data.get("contrast") or []
+    declared = declared_pairs(data)
     results = []
     for theme_key in THEME_KEYS:
         palette = data.get(theme_key)
         if not isinstance(palette, dict) or not palette:
             continue
+        palette = _text_keys(palette)
         # The dark map inherits any token it does not override, so a pair can mix an
-        # overridden background with an inherited ink.
+        # overridden background with an inherited ink. Both maps are keyed by text
+        # before the merge, or a dark "50" would sit beside a light 50, not replace it.
         if theme_key == "colors-dark" and isinstance(data.get("colors"), dict):
-            palette = {**data["colors"], **palette}
+            palette = {**_text_keys(data["colors"]), **palette}
         pairs = []
         if declared:
-            for fg, bg, floor in declared:
-                pairs.append((fg, bg, float(floor)))
+            pairs.extend(declared)
         else:
             for alternatives, floor in DEFAULT_PAIRS:
                 found = find_pair(alternatives, palette)
